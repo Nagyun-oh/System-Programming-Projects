@@ -1,6 +1,13 @@
-#include <stdio.h>  // sprintf()
-#include <string.h> // strcpy()
-#include <openssl/sha.h> //SHA1()
+/*
+*  File Name : proxy_cache.c
+*  OS		 : Ubuntu 20.04 64bits
+*  Author	 : OH Nagyun
+*  Title	 : System Programming Assignment #1-3 (proxy server)
+*/
+
+#include <stdio.h>  
+#include <string.h> 
+#include <openssl/sha.h> 
 #include <sys/types.h>
 #include <unistd.h>
 #include <pwd.h>
@@ -9,330 +16,306 @@
 #include <time.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+
+#define SHA1_RAW_SIZE   20      // SHA1 결과 바이너리 크기 (160 bits)
+#define SHA1_HEX_SIZE   40      // 16진수 변환 후 문자열 길이 (20 * 2)
 #define LOG_DIR "/logfile"
 #define LOG_FILE "/logfile/logfile.txt"
-// File Name	: proxy_cache.c
-// Date		: 2024/04/14
-// Os		: Ubuntu 20.04 64bits
-// Author	: OH Nagyun
-// Student ID	: 2021202089
-// -----------------------------------
-// Title	: System Programming Assignment #1-3 (proxy server)
 
-// 함수 선언 
-char* getHomeDir(char* home);
-char* sha1_hash(char* input_url, char* hashed_url);
-void Make_directory_for_real(const char* path);
-void Make_directory_file(char* hashed_url);
-void Create_log_directory_with_file();
-int HIT_OR_MISS(char* hashed_url);
-void Write_log_in_file( const char* url, const char* hashed_url,const char* type);
-void Write_termination(int hit,int miss,double run_time);
-void run_sub();
-void Write_termination_main(double run_time,int sub_process_count);
 
-int main()
-{
+/* return home directory path string */
+char* getHomeDir(char* home) {
+
+    struct passwd* usr_info = getpwuid(getuid());
+    strcpy(home, usr_info->pw_dir);
+
+    return home;
+}
+
+/* SHA1 */
+char* sha1_hash(char* input_url, char* hashed_url) {
+
+    unsigned char hashed_160bits[20];  // 20byets(160bits)를 저장할 배열  
+    char hashed_hex[41];
+    size_t  i;
+
+    // 1. SHA1 digest 생성 (binary data)
+    SHA1((unsigned char*)input_url, strlen(input_url), hashed_160bits);
+
+    // 2. binary data를 2자리 16진수 문자열로 인코딩
+    for (i = 0; i < sizeof(hashed_160bits); i++) {
+        // hashed_url의 각 인덱스에 2자리씩 기록 (ex: 0a,1f...)
+        sprintf(hashed_hex + i * 2, "%02x", hashed_160bits[i]);
+    }
+
+    strcpy(hashed_url, hashed_hex);
+
+    return hashed_url;
+}
+
+/* mkdir() 함수를 사용하여 0777 권한의 실제 경로를 생성하는 함수 */
+void make_directory(const char* path) {
+
+    char temp[100];
+    char* p = NULL;
+    int len;
+
+    snprintf(temp, sizeof(temp), "%s", path);
+    len = strlen(temp);
+
+    // 경로 마지막에 '/'가 있으면 제거
+    if (temp[len - 1] == '/') {
+        temp[len - 1] = '\0';
+    }
+
+    for (p = temp + 1; *p != '\0'; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(temp, 0777);  // 중간 directory 
+            *p = '/';
+        }
+    }
+
+    mkdir(temp, 0777);  // 최종 directory 
+}
+
+/*  make hashed directory and file */
+void make_directory_and_file(char* hashed_url) {
+
+    char dir_path[100], file_path[200];
+    char home[50];
+    char* homedir = getHomeDir(home);
+
+    // 1) 홈 디렉토리 주소 저장 
+    char cache_root[1024];
+    snprintf(cache_root, sizeof(cache_root), "%s/cache", homedir);
+
+    // 2) 해시화된  URL을 기반으로 디렉토리 생성
+    snprintf(dir_path, sizeof(dir_path), "%s/%c%c%c", cache_root, hashed_url[0], hashed_url[1], hashed_url[2]);
+    dir_path[sizeof(dir_path) - 1] = '\0';
+
+
+    // 3) 디렉토리가 존재하지 않으면 생성
+    if (access(dir_path, F_OK) == -1) {
+        make_directory(dir_path);
+    }
+
+    // 4) 파일 경로를 설정
+    snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, &hashed_url[3]);
+    file_path[sizeof(file_path) - 1] = '\0';
+
+
+    // 5) 파일이 존재하지 않으면 만들기
+    if (access(file_path, F_OK) == -1) {
+
+        FILE* file = fopen(file_path, "w");
+        if (file != NULL) {
+            fclose(file);
+        }
+    }
+}
+
+/*  create log directory and logfile.txt   */
+void create_log_directory_with_file() {
+
+    char home[50];
+    getHomeDir(home);
+
+    char log_dir[100];
+    char log_file[100];
+
+    snprintf(log_dir, sizeof(log_dir), "%s%s", home, LOG_DIR); // log directory
+    snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE); // log/logfile.txt
+
+    // log directory 생성
+    if (access(log_dir, F_OK) == -1) {
+        mkdir(log_dir, 0777);
+    }
+
+    // logfile.txt 생성
+    if (access(log_file, F_OK) == -1) {
+        FILE* file = fopen(log_file, "w");
+        fclose(file);
+    }
+}
+
+/*  Check hit or miss */
+int HIT_OR_MISS(char* hashed_url) {
+
+    char home[50];
+    char cache_dir[100];
+    getHomeDir(home);
+
+    snprintf(cache_dir, sizeof(cache_dir), "%s/cache/%c%c%c", home, hashed_url[0], hashed_url[1], hashed_url[2]);
+
+    DIR* dir = opendir(cache_dir);
+
+    // miss
+    if (dir == NULL) return 0;
+
+    // Check whether hit
+    struct dirent* dir_read;
+    while ((dir_read = readdir(dir)) != NULL) {
+        // hit
+        if (strcmp(dir_read->d_name, &hashed_url[3]) == 0) {
+            closedir(dir);
+            return 1;
+        }
+    }
+
+    // miss
+    closedir(dir);
+    return 0;
+}
+
+/* write log file */
+void write_log_in_file(const char* url, const char* hashed_url, const char* type) {
+
+    char home[50];
+    char log_file[100];
+    char time_buf[50];
+
+    // get home directory and logfile.txt path
+    getHomeDir(home);
+    snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE);
+
+    // get time format
+    time_t cur_time = time(NULL);
+    struct tm* t = localtime(&cur_time);
+    snprintf(time_buf, sizeof(time_buf), "%d/%d/%d, %02d:%02d:%02d",
+        t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+
+    FILE* file = fopen(log_file, "a");
+
+    // hit
+    if (strcmp(type, "Hit") == 0 && hashed_url != NULL) {
+        fprintf(file, "[Hit]%c%c%c/%s-[%s]\n", hashed_url[0], hashed_url[1], hashed_url[2], &hashed_url[3], time_buf);
+        fprintf(file, "[Hit]%s\n", url);
+    }
+
+    // miss
+    else if (strcmp(type, "Miss") == 0) {
+        fprintf(file, "[Miss]%s-[%s]\n", url, time_buf);
+    }
+
+    fclose(file);
+}
+
+/* write termination message in logfile.txt */
+void write_termination(int hit, int miss, double run_time) {
+
+    char home[50];
+    char log_file[100];
+
+    // get home directory and logfile.txt path
+    getHomeDir(home);
+    snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE);
+
+    FILE* file = fopen(log_file, "a");
+    if (file != NULL) {
+        fprintf(file, "[Terminated] run time: %.0f sec. #request hit : %d, miss : %d\n", run_time, hit, miss);
+        fclose(file);
+    }
+
+}
+
+void run_sub() {
+
+    int hit = 0, miss = 0;
+    char url[1024]; char hashed_url[41];
+    time_t start_time = time(NULL); // 시작 시각
+
+    create_log_directory_with_file();
+
+    while (1) {
+
+        // input url
+        printf("[%d]input url>", getpid());
+        fgets(url, sizeof(url), stdin);
+        url[strcspn(url, "\n")] = 0;
+
+        // break 
+        if (strcmp(url, "bye") == 0)break;
+
+        // url -> sha1 -> hashed_url
+        sha1_hash(url, hashed_url);
+
+        // check hit or miss
+        int result = HIT_OR_MISS(hashed_url);
+        if (result) {
+            hit++;
+            write_log_in_file(url, hashed_url, "Hit");
+        }
+        else {
+            miss++;
+            write_log_in_file(url, NULL, "Miss");
+            make_directory_and_file(hashed_url);  // miss인거 기록했으니, 파일 생성
+        }
+    }
+
+    time_t end_time = time(NULL); // 종료 시각
+
+    double termination_time = difftime(end_time, start_time);
+    write_termination(hit, miss, termination_time);
+
+}
+
+void write_termination_main(double run_time, int sub_process_count) {
+
+    char home[50];
+    char log_file[100];
+
+    getHomeDir(home);
+    snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE);
+
+    FILE* file = fopen(log_file, "a");
+
+    fprintf(file, " **SERVER** [Terminated] run time: %.0f sec. #sub process: %d\n", run_time, sub_process_count);
+}
+
+
+int main(){
+
+    /* 초기 세팅 */
 	umask(0);
-	time_t start_time = time(NULL);  // 시작 시간 
-
-	int sub_process_count =0; // 자식 프로세서 카운트  변수 
-
+	time_t start_time = time(NULL);  
+	int sub_process_count =0; // 자식 프로세서 수
 	pid_t pid;
 	char input_cmd[20];
 
-	while(1)
-	{
-		// 명령어 입력 (connect, quit)
-	 	printf("[%d]input CMD> ",getpid());
-		fgets(input_cmd,sizeof(input_cmd),stdin);
-		input_cmd[strcspn(input_cmd,"\n")]=0;
+    while (1) {
 
-		// connect 
-		if(strcmp(input_cmd,"connect")==0)
-		{
-			pid = fork(); // fork 함수를 통해, 자식 프로세서 생성
-			if(pid==0) // 자식 프로세서가 생성되었다면,
-			{ 
-			run_sub();  // Proxy 1-2 기능 수행
-					
-			exit(0); // 자식 프로세서 종료
-			}
-			else
-			{
-				sub_process_count++;  //자식 프로세서 카운터 증가
-				wait(NULL); //자식 프로세서 종료까지 기다림
-			}
-		}
-		else if(strcmp(input_cmd,"quit")==0) // quit
-		{
-			break;
-		}
-	}
+        printf("[%d]input CMD> ", getpid());
+        fgets(input_cmd, sizeof(input_cmd), stdin);
+        input_cmd[strcspn(input_cmd, "\n")] = 0;
 
+        /* connect */
+        if (strcmp(input_cmd, "connect") == 0) {
 
-	time_t end_time =time(NULL); // 종료시간 얻기
-        double termination_time = difftime(end_time,start_time); // 총 동작 시간
+            pid = fork();
 
-	Write_termination_main(termination_time,sub_process_count); // 함수 호출 통해 총 동작시간, 자식 프로세서 수 작성
-	return 0;	
-
-}
-
-
-// 홈 디렉토리 경로 반환
-char* getHomeDir(char* home)
-{
-        struct passwd* usr_info = getpwuid(getuid());
-        strcpy(home, usr_info->pw_dir);
-
-        return home;
-}
-
-// SHA1 
-char* sha1_hash(char* input_url, char* hashed_url)
-{
-        unsigned char hashed_160bits[20];  // 20byets(160bits)를 저장할 배열
-        char hashed_hex[41];
-        size_t  i;
-
-        SHA1((unsigned char*)input_url,strlen(input_url),hashed_160bits); // SHA1()함수를 호출하여 input_url에 대해 해싱된 20byte 데이터를 hashed_160bits 에 저장
-
-        for(i=0;i<sizeof(hashed_160bits);i++)
-                sprintf(hashed_hex + i*2, "%02x", hashed_160bits[i]);  // hashed 
-
-        strcpy(hashed_url,hashed_hex); // hashed_url 
-
-        return hashed_url;
-}
-
-// mkdir() 함수를 사용하여 0777 권한의  실제 경로를 생성하는 함수
-void Make_directory_for_real(const char* path)
-{
-        char temp[100];
-        char* p = NULL;
-        int len;
-
-        snprintf(temp, sizeof(temp), "%s", path); // 경로 저장
-        len = strlen(temp);
-
-        if (temp[len - 1] == '/')  // 경로 마지막에 '/'가 있으면 제거
-                temp[len - 1] = '\0';
-
-        for (p = temp + 1; *p!='\0'; p++) {
-                if (*p == '/') {
-                        *p = '\0';
-                        mkdir(temp, 0777);  // 중간 directory 
-                        *p = '/';
-                }
+            if (pid == 0) {
+                run_sub();  // Proxy 1-2 기능 수행	
+                exit(0); // 자식 프로세서 종료
+            }
+            else {
+                sub_process_count++;
+                wait(NULL); //자식 프로세서 종료까지 기다림
+            }
         }
-
-        mkdir(temp, 0777);  // 최종 directory 
-}
-
-// directory 와  파일 생성 함수
-void Make_directory_file(char* hashed_url) {
-        char dir_path[100], file_path[200];
-        char home[50];
-        char* homedir = getHomeDir(home);
-
-        // 홈 디렉토리 주소 저장
-        char cache_root[50];
-        snprintf(cache_root, sizeof(cache_root), "%s/cache", homedir);
-
-        // 해시화된  URL을 기반으로 디렉토리 생성
-        snprintf(dir_path, sizeof(dir_path), "%s/%c%c%c", cache_root, hashed_url[0], hashed_url[1], hashed_url[2]);
-        dir_path[sizeof(dir_path)-1] = '\0';
-
-        // 디렉토리가 존재하지 않으면 생성
-        if (access(dir_path, F_OK) == -1) {
-                Make_directory_for_real(dir_path);
+        /* quit */
+        else if (strcmp(input_cmd, "quit") == 0) {
+            break;
         }
+    }
 
-        // 파일 경로를 설정
-        snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, &hashed_url[3]);
-        file_path[sizeof(file_path)-1] = '\0';
+	time_t end_time =time(NULL); 
+    double termination_time = difftime(end_time,start_time); 
 
-        // 파일이 존재하지 않으면 만들기
-        if (access(file_path, F_OK) == -1)
-        {
-                FILE* file = fopen(file_path, "w");
-                if (file != NULL)
-                {
-                        fclose(file);
-                }
-        }
-
+	write_termination_main(termination_time,sub_process_count); 
+	
+    return 0;	
 }
 
 
-
-// 로그 디렉토리/파일 생성
-void Create_log_directory_with_file()
-{
-        char home[50];
-        getHomeDir(home); // home 디렉토리 얻기
-
-        char log_dir[100];
-        char log_file[100];
-
-        snprintf(log_dir, sizeof(log_dir), "%s%s", home,LOG_DIR); // log 디렉토리 주소
-        snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE); //log 파일 주소
-
-        if (access(log_dir, F_OK) == -1) mkdir(log_dir, 0777); //log 디렉토리에  0777권한 부여 하여 생성
-
-        if (access(log_file, F_OK) == -1) // log 파일이 존재하지 않으면
-        {
-                FILE* file = fopen(log_file, "w"); // 파일 생성
-                fclose(file); // 파일 닫기
-        }
-}
-
-
-
-int HIT_OR_MISS(char* hashed_url)
-{
-        char home[50];
-        char cache_dir[100];
-
-        // hashed_url 에 대한 directory경로  구하기
-        snprintf(cache_dir, sizeof(cache_dir), "%s/cache/%c%c%c", getHomeDir(home), hashed_url[0], hashed_url[1], hashed_url[2]);
-
-        DIR* dir = opendir(cache_dir); // opendir(hashed_url에 대한 directory명)
-
-        if (dir == NULL) return 0;  // MISS
-
-        struct dirent* dir_read;
-        while ((dir_read = readdir(dir)) != NULL)
-        {
-                // 디렉토리 내의 파일명이 hashed_url과 동일하면 HIT
-                if (strcmp(dir_read->d_name, &hashed_url[3]) == 0)
-                {
-                        closedir(dir);
-                        return 1; // HIT
-                }
-        }
-
-        // 위의 while문에서 값을 return 하지 않았다면 MISS임
-        closedir(dir);
-        return 0; // MISS
-
-}
-
-
-
-
-// 로그 작성 함수
-void Write_log_in_file( const char* url, const char* hashed_url,const char* type)
-{
-        char home[50];
-        char log_file[100];
-        char time_buf[50];
-
-        getHomeDir(home); // 홈 디렉토리 경로
-
-        snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE); // 로그파일명  주소 얻기
-
-        time_t cur_time = time(NULL);  // 현재 시간
-        struct tm* t = localtime(&cur_time); // broken_time 변수 얻기
-        // "year/month/day hour/min/sec" 시간 형식 얻기
-        snprintf(time_buf, sizeof(time_buf), "%d/%d/%d, %02d:%02d:%02d", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-
-
-        FILE* file = fopen(log_file, "a"); // 파일 append 모드로 열기
-        // HIT
-        if (strcmp(type, "Hit") == 0&&hashed_url!=NULL)
-        {
-                fprintf(file, "[Hit]%c%c%c/%s-[%s]\n", hashed_url[0], hashed_url[1], hashed_url[2], &hashed_url[3], time_buf);
-                fprintf(file, "[Hit]%s\n", url);
-        }
-        // MISS
-        else if (strcmp(type, "Miss") == 0)
-        {
-                fprintf(file, "[Miss]%s-[%s]\n", url, time_buf);
-
-	}
-
-        fclose(file); // 파일 닫기
-}
-
-
-
-// 종료 로그 작성
-void Write_termination(int hit,int miss,double run_time)
-{
-        char home[50];
-        char log_file[100];
-        getHomeDir(home); // 홈 디렉토리 얻기
-
-        snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE); // 로그파일에 대한 주소명 얻기
-
-        FILE* file = fopen(log_file, "a");
-        if (file != NULL)
-        {
-                // 로그파일에 종료 로그 적기
-                fprintf(file, "[Terminated] run time: %.0f sec. #request hit : %d, miss : %d\n", run_time, hit, miss);
-                fclose(file);
-        }
-
-}
-
-void run_sub()
-{
-	int hit=0;
-	int miss=0;
-	char url[20];   // 입력받는 url
-        char hashed_url[41]; //hashed_url
-        umask(0);
-
-        time_t start_time = time(NULL); // 시작 시간
-
-        Create_log_directory_with_file(); // 함수호출 =>  /log/logfile 생성
-
-        while(1)
-        {
-        printf("[%d]input url>",getpid());
-        fgets(url,sizeof(url),stdin); // url 입력
-        url[strcspn(url,"\n")]=0; // 개행문자 처리
-
-        if(strcmp(url,"bye")==0)break; // bye 면 반복문 탈출해서 프로그램 종료하게끔 함
-
-
-	sha1_hash(url, hashed_url); // 입력받은 url에 대해서 함수 호출해서 해쉬처리
-        int result = HIT_OR_MISS(hashed_url);
-
-         if (result)
-         {
-                  hit++; // hit count 증가
-                  Write_log_in_file(url,hashed_url,"Hit");
-          }
-         else
-         {
-                  miss++; // miss count 증가
-                  Write_log_in_file(url,NULL,"Miss"); // miss 이면 로그파일에 miss인거 기록
-                  Make_directory_file(hashed_url);  // miss인거 기록했으니, 파일 생성
-         }
-
-        }
-
-         // Terminated time 작성
-        time_t end_time =time(NULL); // 종료시간 얻기
-        double termination_time = difftime(end_time,start_time);
-        Write_termination(hit,miss,termination_time);
-
-}
-
-void Write_termination_main(double run_time,int sub_process_count)
-{
-	char home[50];
-        char log_file[100];
-        getHomeDir(home); // 홈 디렉토리 얻기
-
-        snprintf(log_file, sizeof(log_file), "%s%s", home, LOG_FILE); // 로그파일에 대한 주소>명 얻기
-
-        FILE* file = fopen(log_file, "a"); // 파일 append 모드로 열기
-
-	// 총 동작 시간 및 자식 프로세서 수에 대한 로그 작성
-        fprintf(file," **SERVER** [Terminated] run time: %.0f sec. #sub process: %d\n",run_time,sub_process_count);
-}
 
