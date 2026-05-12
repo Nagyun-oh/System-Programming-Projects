@@ -1,16 +1,16 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// File Name	: proxy_cache.c						      			                              //
-// Date		: 2024/05/08						     			                                  //
-// Os		: Ubuntu 20.04 64bits			                     		                    	  //
-// Author	: OH Nagyun					             		                                	  //
-// Student ID	: 2021202089						    		                            	  //
-// ---------------------------------------------------------------------   		            	  //
-// Title	: System Programming Assignment #2-2 (proxy server)				                      //
-// Description  :										                                          //
-// 	- 웹 브라우저로부터 URL을 입력받고, HTTP request를 받음 			                                  //
-// 	- 자식 프로세서는 웹 브라우저의 요청에 응답후 종료	                                                    //
-//	- HTTP request header로 부터 host정보 (url)	 추출                                                //
-// 	- Assignment 1-2 수행										                                  //
+// File Name	: proxy_cache.c						      			                              
+// Date		: 2024/05/08						     			                                  
+// Os		: Ubuntu 20.04 64bits			                     		                    	  
+// Author	: OH Nagyun					             		                                	 
+// Student ID	: 2021202089						    		                            	
+// ---------------------------------------------------------------------   		            	 
+// Title	: System Programming Proxy #2-2 (proxy server)				                     
+// Description  :										                                          
+// 	- 웹 브라우저로부터 URL을 입력받고, HTTP request를 받음 			                                 
+// 	- 자식 프로세서는 웹 브라우저의 요청에 응답후 종료	                                                  
+//	- HTTP request header로 부터 host정보 (url)	 추출                                               
+// 	- Proxy 1-2 수행										                                  
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <stdio.h>
@@ -36,22 +36,21 @@
 #define LOG_DIR		"/logfile"
 #define LOG_FILE	"/logfile/logfile.txt"
 
-// 함수 선언
 int is_already_logged(const char* url);
 char* getHomeDir(char* home);
 char* sha1_hash(char* input_url, char* hashed_url);
-void Make_directory_for_real(const char* path);
-void Make_directory_file(char* hashed_url);
-void Create_log_directory_with_file();
+void make_directory(const char* path);
+void make_directory_and_file(char* hashed_url);
+void create_log_directory_with_file();
 int HIT_OR_MISS(char* hashed_url);
-void Write_log_in_file( const char* url, const char* hashed_url,const char* type);
-void Write_termination(int hit,int miss,double run_time);
+void write_log_in_file( const char* url, const char* hashed_url,const char* type);
+void write_termination(int hit,int miss,double run_time);
 
 static void handler()
 {
 	pid_t pid;
 	int status;
-	while((pid=waitpid(-1,&status,WNOHANG)>0));
+	while((pid=waitpid(-1,&status,WNOHANG)) > 0);
 }
 
 int main()
@@ -66,45 +65,45 @@ int main()
     
     signal(SIGCHLD,handler) ; // 좀비 프로세서 방지
 
-    //소켓 생성
+    // 1. 소켓 생성
     if((socekt_fd=socket(PF_INET,SOCK_STREAM,0))<0)
     {
         printf("Server : Can't open stream socket\n");
         return 0;
     }
 
-    //서버 주소 정보 초기화
+    // 2. 서버 주소 정보 초기화
     bzero((char*)&server_addr,sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 모든 IP로부터 연결 허용
-    server_addr.sin_port = htons(PORT); // 지정 포트로 바인딩
+    server_addr.sin_family = AF_INET;                   // IPv4
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);    // 모든 IP로부터 연결 허용
+    server_addr.sin_port = htons(PORT);                 // 지정 포트로 바인딩
 
-    // 소켓에 주소 바인딩
-    if(bind(socekt_fd,(struct sockaddr*)&server_addr,sizeof(server_addr))<0)
-    {
+    // 3. 소켓에 주소 바인딩
+    if(bind(socekt_fd,(struct sockaddr*)&server_addr,sizeof(server_addr))<0){
         printf("Server : Can't bind local address\n");
         return 0;
     }
 
-    //클라이언트 연결 대기
+    // 4. 클라이언트 연결 대기
     listen(socekt_fd,5); 
 
-    // 메인 루프 : 웹 요청을 계속해서 처리
+    // 5. 메인 루프 : 웹 요청을 계속해서 처리
     while(1)
     {
         struct in_addr inet_client_address;
 
-        char buf[BUFFSIZE]={0,}; // 클라이언트 요청 저장
-        char response_header[BUFFSIZE] = {0,}; //header
-        char response_message[2048]={0,};  // message
+        char buf[BUFFSIZE]={0,};                // 클라이언트 요청 저장
+        char response_header[BUFFSIZE] = {0,};  // header
+        char response_message[2048]={0,};       // message
         char tmp[BUFFSIZE] = {0,};
-        char method[20] = {0,};
-        char url[BUFFSIZE] = {0,}; // 요청 URL 저장
+        char method[20] = {0,}; 
+        char url[BUFFSIZE] = {0,};              // 요청 URL 저장
         
         char* tok = NULL;
 
         len = sizeof(client_addr);
-        //클라이언트 접속 대기 및 수락
+        
+        // 클라이언트 접속 대기 및 수락
         client_fd = accept(socekt_fd,(struct sockaddr*)&client_addr,&len);
         if(client_fd<0)
         {
@@ -120,8 +119,8 @@ int main()
         memset(response_header,0,sizeof(response_header));
         memset(response_message,0,sizeof(response_message));
         
-        read(client_fd,buf,BUFFSIZE); // 클라이언트로부터 요청 메시지 읽기
-        strcpy(tmp,buf); // 원본 복사
+        read(client_fd,buf,BUFFSIZE);   // 클라이언트로부터 요청 메시지 읽기
+        strcpy(tmp,buf);                // 원본 복사
 
         // 요청 로그 출력
         puts("===============================================");
@@ -142,74 +141,83 @@ int main()
 
         // fork()를 이용하여, 자식 프로세서에서 요청 처리
         pid_t pid =fork();
+        
         if(pid==0) // child process
+        
         { 
-        // 요청 URL 해쉬화
-        char hashed_url[41];
-        sha1_hash(url,hashed_url);
+            // 요청 URL 해쉬화
+            char hashed_url[41];
+            sha1_hash(url,hashed_url);
 
-        //캐시 여부 확인
-        int cache_state = HIT_OR_MISS(hashed_url);
+            //캐시 여부 확인
+            int cache_state = HIT_OR_MISS(hashed_url);
 
-        if(cache_state){
+        
+            if(cache_state){
             // HIT
-            if((strcmp(method, "GET") == 0) && strstr(buf, "Upgrade-Insecure-Requests: 1"))
-            {
-            if(!is_already_logged(url))
-            {
-            Write_log_in_file(url, hashed_url, "Hit"); // log 작성
-            hit_count++;
+                if((strcmp(method, "GET") == 0) && strstr(buf, "Upgrade-Insecure-Requests: 1"))
+                {
+                    if(!is_already_logged(url))
+                    {
+                        write_log_in_file(url, hashed_url, "Hit"); 
+                        hit_count++;
+                    }
+                }   
+                // 응답 메시지 구성
+                snprintf(response_message,sizeof(response_message),       
+                    "<h1>HIT</h1><br>"         
+                    "%s:%d<br>"       
+                    "%s<br>"    
+                    "kw:2021202089",inet_ntoa(inet_client_address),client_addr.sin_port,url);
             }
-            }   
-            // 응답 메시지 구성
-            snprintf(response_message,sizeof(response_message),
-                "<h1>HIT</h1><br>"
-                "%s:%d<br>"
-                "%s<br>"
-                "kw:2021202089",inet_ntoa(inet_client_address),client_addr.sin_port,url);
-        }
-        else{
-            // MISS
-            Make_directory_file(hashed_url);
-            if((strcmp(method, "GET") == 0) && strstr(buf, "Upgrade-Insecure-Requests: 1"))
-            {
-            if(!is_already_logged(url)){
-            Write_log_in_file(url, hashed_url, "Miss"); // log 작성
-            miss_count++;
+        
+            else{  
+                // MISS
+                make_directory_and_file(hashed_url);
+                if((strcmp(method, "GET") == 0) && strstr(buf, "Upgrade-Insecure-Requests: 1"))
+                {
+                    if(!is_already_logged(url)){
+                        write_log_in_file(url, hashed_url, "Miss"); 
+                        miss_count++;
+                    }
+                }
+            
+                // 응답 메시지 구성
+                snprintf(response_message,sizeof(response_message),        
+                    "<h1>MISS</h1><br>"    
+                    "%s:%d<br>"       
+                    "%s<br>"
+                    "kw:2021202089",inet_ntoa(inet_client_address),client_addr.sin_port,url);
+        
             }
-            }
-            // 응답 메시지 구성
-            snprintf(response_message,sizeof(response_message),
-                "<h1>MISS</h1><br>"
-                "%s:%d<br>"
-                "%s<br>"
-                "kw:2021202089",inet_ntoa(inet_client_address),client_addr.sin_port,url);
-        }
-        //응답 헤더 생성
-        sprintf(response_header,
-        "HTTP/1.0 200 OK\r\n"
-        "Server:2018 simple web_server\r\n"
-        "Content-length:%lu\r\n"
-        "Content-type:text/html\r\n\r\n",strlen(response_message));
+        
+            //응답 헤더 생성
+            sprintf(response_header,
+                "HTTP/1.0 200 OK\r\n"
+                "Server:2018 simple web_server\r\n"
+                "Content-length:%lu\r\n"  
+                "Content-type:text/html\r\n\r\n",strlen(response_message));
 
-        // 응답 전송
-        write(client_fd,response_header,strlen(response_header));
-        write(client_fd,response_message,strlen(response_message));
+            // 응답 전송
+            write(client_fd,response_header,strlen(response_header));
+            write(client_fd,response_message,strlen(response_message));
 
-        printf("[%s : %d] client was disconnected\n",inet_ntoa(inet_client_address),client_addr.sin_port);
-        close(client_fd); // end child process
-        exit(0); // end child process
-       }
-       else if(pid>0) 
-       {
+            printf("[%s : %d] client was disconnected\n",inet_ntoa(inet_client_address),client_addr.sin_port);
+            close(client_fd); // end child process
+            exit(0); // end child process
+        }
+        else if(pid>0) 
+        {
         // 부모 프로세서는 다음 요청 받기 위해 client_fd만 닫고 반복
-        close(client_fd);
-       }
+            close(client_fd);
+        }
+
 }
-    close(socekt_fd); // 서버 종료시 소켓을 닫고 리소스를 정리
-   
-    return 0;
+    
+close(socekt_fd); // 서버 종료시 소켓을 닫고 리소스를 정리
+return 0;
 }
+
 ///////////////////////////////////////////////////////////////////////////////
 // Function: is_already_logged
 // Input:
@@ -247,6 +255,7 @@ char* getHomeDir(char* home)
 		
 	return home;	
 }
+
 // SHA1 
 char* sha1_hash(char* input_url, char* hashed_url)
 {
@@ -254,12 +263,12 @@ char* sha1_hash(char* input_url, char* hashed_url)
 	char hashed_hex[41];
 	size_t  i;
 
-	SHA1((unsigned char*)input_url,strlen(input_url),hashed_160bits); // SHA1()함수를 호출하여 input_url에 대해 해싱된 20byte 데이터를 hashed_160bits 에 저장
+	SHA1((unsigned char*)input_url,strlen(input_url),hashed_160bits); 
 
 	for(i=0;i<sizeof(hashed_160bits);i++)
-		sprintf(hashed_hex + i*2, "%02x", hashed_160bits[i]);  // hashed 
+		sprintf(hashed_hex + i*2, "%02x", hashed_160bits[i]);  
 
-	strcpy(hashed_url,hashed_hex); // hashed_url 
+	strcpy(hashed_url,hashed_hex); 
 
 	return hashed_url;
 }
@@ -274,7 +283,7 @@ char* sha1_hash(char* input_url, char* hashed_url)
 //   - 입력된 전체 경로를 기준으로 중간 디렉토리를 포함하여 모든 디렉토리를 생성
 //   - 이미 존재하는 디렉토리는 무시하고, 존재하지 않는 디렉토리만 생성
 ///////////////////////////////////////////////////////////////////////////////
-void Make_directory_for_real(const char* path) 
+void make_directory(const char* path) 
 {
     char temp[100];
     char* p = NULL;
@@ -308,7 +317,7 @@ void Make_directory_for_real(const char* path)
 //   - 해시된 URL을 기준으로 디렉토리 및 파일 경로를 구성
 //   - ~/cache/abc/defg... 형태로 디렉토리를 생성하고, 해당 위치에 파일이 없으면 빈 파일 생성
 ///////////////////////////////////////////////////////////////////////////////
-void Make_directory_file(char* hashed_url) {
+void make_directory_and_file(char* hashed_url) {
     char dir_path[100], file_path[200];
     char home[50];
     char* homedir = getHomeDir(home);
@@ -323,7 +332,7 @@ void Make_directory_file(char* hashed_url) {
 
     // 디렉토리가 존재하지 않으면 생성
     if (access(dir_path, F_OK) == -1) {
-        Make_directory_for_real(dir_path);
+        make_directory(dir_path);
     }
     // 파일 경로를 설정
     snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, &hashed_url[3]);
@@ -351,7 +360,7 @@ void Make_directory_file(char* hashed_url) {
 //   - 사용자의 홈 디렉토리 하위에 로그 디렉토리(`/logfile`)가 없으면 생성
 //   - 로그 파일(`logfile.txt`)이 없으면 새로 생성
 ///////////////////////////////////////////////////////////////////////////////
-void Create_log_directory_with_file()
+void create_log_directory_with_file()
 {
     char home[50];
     getHomeDir(home);
@@ -410,7 +419,7 @@ int HIT_OR_MISS(char* hashed_url)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Function: Write_log_in_file
+// Function: write_log_in_file
 // Input:
 //   - url         : 클라이언트가 요청한 원래 URL
 //   - hashed_url  : SHA1으로 해시된 URL
@@ -421,7 +430,7 @@ int HIT_OR_MISS(char* hashed_url)
 //   - 클라이언트 요청 처리 결과(Hit/Miss)를 로그 파일에 기록
 //   - 처리 시간과 PID 정보를 포함한 로그 메시지 작성
 ///////////////////////////////////////////////////////////////////////////////
-void Write_log_in_file( const char* url, const char* hashed_url,const char* type)
+void write_log_in_file( const char* url, const char* hashed_url,const char* type)
 {
     char home[50];
     char log_file[100];
@@ -433,7 +442,6 @@ void Write_log_in_file( const char* url, const char* hashed_url,const char* type
 
     time_t cur_time = time(NULL);  // 현재 시간
     struct tm* t = localtime(&cur_time); // broken_time 변수 얻기
-    // "year/month/day hour/min/sec" 시간 형식 얻기
     snprintf(time_buf, sizeof(time_buf), "%d/%d/%d, %02d:%02d:%02d", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
 
 
@@ -452,6 +460,7 @@ void Write_log_in_file( const char* url, const char* hashed_url,const char* type
 
     fclose(file); // 파일 닫기
 }
+
 ///////////////////////////////////////////////////////////////////////////////
 // Function: Write_termination
 // Input:
@@ -464,7 +473,7 @@ void Write_log_in_file( const char* url, const char* hashed_url,const char* type
 //   - 클라이언트와의 연결이 종료될 때 로그 파일에 요약 정보 기록
 //   - 서버 PID, 실행 시간, HIT/MISS 수를 남김
 ///////////////////////////////////////////////////////////////////////////////
-void Write_termination(int hit,int miss,double run_time)
+void write_termination(int hit,int miss,double run_time)
 {
     char home[50];
     char log_file[100];
