@@ -1,16 +1,16 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// File Name	: proxy_cache.c						      			                              //
-// Date		: 2024/05/08						     			                                  //
-// Os		: Ubuntu 20.04 64bits			                     		                    	  //
-// Author	: OH Nagyun					             		                                	  //
-// Student ID	: 2021202089						    		                            	  //
-// ---------------------------------------------------------------------   		            	  //
-// Title	: System Programming Assignment #2-3 (proxy server)				                      //
-// Description  :										                                          //
-// 	- 웹 브라우저로부터 HTTP request를 받음			                                                   //
-// 	- HTTP request header로 부터 host정보 (url) 추출                                                 //
-//	- 추출된 URL을 이용한  HIT / MISS 판별  , HTTP response 수신                                       //
-// 	- signal() 함수를 사용하여 SIGCHLD, SIGALRM 시그널 처리							                   //
+// File Name	: proxy_cache.c						      			                              
+// Date		: 2024/05/08						     			                                  
+// Os		: Ubuntu 20.04 64bits			                     		                    	  
+// Author	: OH Nagyun					             		                                	  
+// Student ID	: 2021202089						    		                            	  
+// ---------------------------------------------------------------------   		            	  
+// Title	: System Programming Assignment #2-3 (proxy server)				                      
+// Description  :										                                          
+// 	- 웹 브라우저로부터 HTTP request를 받음			                                                   
+// 	- HTTP request header로 부터 host정보 (url) 추출                                                 
+//	- 추출된 URL을 이용한  HIT / MISS 판별  , HTTP response 수신                                       
+// 	- signal() 함수를 사용하여 SIGCHLD, SIGALRM 시그널 처리							                   
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // read는 자식 프로세스가 해야 의미 있는 timeout 처리가 가능
 #include <stdio.h>
@@ -42,12 +42,12 @@ void my_alarm(int signo);
 int is_already_logged(const char* url);
 char* getHomeDir(char* home);
 char* sha1_hash(char* input_url, char* hashed_url);
-void Make_directory_for_real(const char* path);
-void Make_directory_file(char* hashed_url);
-void Create_log_directory_with_file();
+void make_directory(const char* path);
+void make_directory_and_file(char* hashed_url);
+void create_log_directory_with_file();
 int HIT_OR_MISS(char* hashed_url);
-void Write_log_in_file( const char* url, const char* hashed_url,const char* type);
-void Write_termination(int hit,int miss,double run_time);
+void write_log_in_file( const char* url, const char* hashed_url,const char* type);
+void write_termination(int hit,int miss,double run_time);
 
 static void handler()
 {
@@ -133,8 +133,8 @@ int main()
         if(pid==0) // child process
         { 
         
-        read(client_fd,buf,BUFFSIZE); // 클라이언트로부터 요청 메시지 읽기
-        strcpy(tmp,buf); // 원본 복사
+            read(client_fd,buf,BUFFSIZE); // 클라이언트로부터 요청 메시지 읽기
+            strcpy(tmp,buf); // 원본 복사
 
         // 요청 로그 출력
         puts("===============================================");
@@ -163,15 +163,19 @@ int main()
         char home[50];
         getHomeDir(home);
         if(cache_state){
+            
             printf("HIT\n");
+            
             // HIT
-            if((strcmp(method, "GET") == 0) && strstr(buf, "Upgrade-Insecure-Requests: 1"))
-            {
-            if(!is_already_logged(url))
-            {
-            Write_log_in_file(url, hashed_url, "Hit"); // log 작성
-            hit_count++;
-            }
+            
+            if((strcmp(method, "GET") == 0) && strstr(buf, "Upgrade-Insecure-Requests: 1")) {
+
+                if(!is_already_logged(url))
+           
+                {  
+                    Write_log_in_file(url, hashed_url, "Hit"); // log 작성    
+                    hit_count++;  
+                }
             }   
             
             char file_path[200];
@@ -193,8 +197,7 @@ int main()
         // 캐시 파일 내용 전송
         char cache_buf[BUFFSIZE];
         size_t n;
-        while ((n = fread(cache_buf, 1, sizeof(cache_buf), cache_fp)) > 0) 
-        {
+        while ((n = fread(cache_buf, 1, sizeof(cache_buf), cache_fp)) > 0) {
             write(client_fd, cache_buf, n);
         }
 
@@ -207,10 +210,12 @@ int main()
             if((strcmp(method, "GET") == 0) && strstr(buf, "Upgrade-Insecure-Requests: 1"))
             {
             if(!is_already_logged(url))
-                {
-            Write_log_in_file(url, hashed_url, "Miss"); // log 작성
-            miss_count++;
-                 }
+                
+            {
+                Write_log_in_file(url, hashed_url, "Miss"); // log 작성
+                miss_count++;  
+            }
+
             }
         // URL에서 host와 path 분리
         char host[BUFFSIZE] = {0}, path[BUFFSIZE] = "/";
@@ -272,17 +277,19 @@ int main()
             bzero(web_buf, sizeof(web_buf));
         }
         if (cache_fp) fclose(cache_fp);
-        close(web_fd);    
-        }
         
-        printf("[%s : %d] client was disconnected\n",inet_ntoa(inet_client_address),client_addr.sin_port);
-        close(client_fd); // end child process
-        exit(0); // end child process
-       }
+        close(web_fd);    
+       
+ }
+            
+    printf("[%s : %d] client was disconnected\n",inet_ntoa(inet_client_address),client_addr.sin_port); 
+    close(client_fd); // end child process 
+    exit(0); // end child process
+}
        else if(pid>0) 
        {
-        // 부모 프로세서는 다음 요청 받기 위해 client_fd만 닫고 반복
-        close(client_fd);
+           // 부모 프로세서는 다음 요청 받기 위해 client_fd만 닫고 반복
+           close(client_fd);
        }
 }
     
@@ -353,7 +360,7 @@ char* sha1_hash(char* input_url, char* hashed_url)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Function: Make_directory_for_real
+// Function: make_directory
 // Input:
 //   - path : 생성할 전체 디렉토리 경로 (예: /home/user/cache/xx/yy)
 // Output:
@@ -362,7 +369,7 @@ char* sha1_hash(char* input_url, char* hashed_url)
 //   - 입력된 전체 경로를 기준으로 중간 디렉토리를 포함하여 모든 디렉토리를 생성
 //   - 이미 존재하는 디렉토리는 무시하고, 존재하지 않는 디렉토리만 생성
 ///////////////////////////////////////////////////////////////////////////////
-void Make_directory_for_real(const char* path) 
+void make_directory(const char* path) 
 {
     char temp[100];
     char* p = NULL;
@@ -387,7 +394,7 @@ void Make_directory_for_real(const char* path)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Function: Make_directory_file
+// Function: make_directory_and_file
 // Input:
 //   - hashed_url : SHA1 해시된 URL 문자열 (총 40자리)
 // Output:
@@ -396,7 +403,7 @@ void Make_directory_for_real(const char* path)
 //   - 해시된 URL을 기준으로 디렉토리 및 파일 경로를 구성
 //   - ~/cache/abc/defg... 형태로 디렉토리를 생성하고, 해당 위치에 파일이 없으면 빈 파일 생성
 ///////////////////////////////////////////////////////////////////////////////
-void Make_directory_file(char* hashed_url) {
+void make_directory_and_file(char* hashed_url) {
     char dir_path[100], file_path[200];
     char home[50];
     char* homedir = getHomeDir(home);
@@ -430,7 +437,7 @@ void Make_directory_file(char* hashed_url) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Function: Create_log_directory_with_file
+// Function: create_log_directory_with_file
 // Input:
 //   - 없음
 // Output:
@@ -439,7 +446,7 @@ void Make_directory_file(char* hashed_url) {
 //   - 사용자의 홈 디렉토리 하위에 로그 디렉토리(`/logfile`)가 없으면 생성
 //   - 로그 파일(`logfile.txt`)이 없으면 새로 생성
 ///////////////////////////////////////////////////////////////////////////////
-void Create_log_directory_with_file()
+void create_log_directory_with_file()
 {
     char home[50];
     getHomeDir(home);
@@ -509,7 +516,7 @@ int HIT_OR_MISS(char* hashed_url)
 //   - 클라이언트 요청 처리 결과(Hit/Miss)를 로그 파일에 기록
 //   - 처리 시간과 PID 정보를 포함한 로그 메시지 작성
 ///////////////////////////////////////////////////////////////////////////////
-void Write_log_in_file( const char* url, const char* hashed_url,const char* type)
+void write_log_in_file( const char* url, const char* hashed_url,const char* type)
 {
     char home[50];
     char log_file[100];
@@ -552,7 +559,7 @@ void Write_log_in_file( const char* url, const char* hashed_url,const char* type
 //   - 클라이언트와의 연결이 종료될 때 로그 파일에 요약 정보 기록
 //   - 서버 PID, 실행 시간, HIT/MISS 수를 남김
 ///////////////////////////////////////////////////////////////////////////////
-void Write_termination(int hit,int miss,double run_time)
+void write_termination(int hit,int miss,double run_time)
 {
     char home[50];
     char log_file[100];
