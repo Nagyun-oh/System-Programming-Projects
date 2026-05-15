@@ -1,18 +1,18 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// File Name	: proxy_cache.c						      			                              //
-// Date		: 2024/05/29						     			                                  //
-// Os		: Ubuntu 20.04 64bits			                     		                    	  //
-// Author	: OH Nagyun					             		                                	  //
-// Student ID	: 2021202089						    		                            	  //
-// ---------------------------------------------------------------------   		            	  //
-// Title	: System Programming Assignment #3-1 (proxy server)				                      //
-// Description  :										                                          //
-// 	- 웹 브라우저로부터 HTTP request를 받음			                                                   //
-// 	- HTTP request header로 부터 host정보 (url) 추출                                                 //
-//	- 추출된 URL을 이용한  HIT / MISS 판별  , HTTP response 수신                                       //
-// 	- signal() 함수를 사용하여 SIGCHLD, SIGALRM, SIGINT 시그널 처리                                     //
-//  - HIT/MISS , Terminated message for logfile.txt	                                               //  
-//  - Semaphore를 활용하여, process 동기화              						                      //
+// File Name	: proxy_cache.c						      			                              
+// Date		: 2024/05/29						     			                                  
+// Os		: Ubuntu 20.04 64bits			                     		                    	  
+// Author	: OH Nagyun					             		                                	  
+// Student ID	: 2021202089						    		                            	  
+// ---------------------------------------------------------------------   		            	  
+// Title	: System Programming Assignment #3-1 (proxy server)				                      
+// Description  :										                                          
+// 	- 웹 브라우저로부터 HTTP request를 받음			                                                   
+// 	- HTTP request header로 부터 host정보 (url) 추출                                                 
+//	- 추출된 URL을 이용한  HIT / MISS 판별  , HTTP response 수신                                       
+// 	- signal() 함수를 사용하여 SIGCHLD, SIGALRM, SIGINT 시그널 처리                                     
+//  - HIT/MISS , Terminated message for logfile.txt	                                               
+//  - Semaphore를 활용하여, process 동기화              						                     
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // read는 자식 프로세스가 해야 의미 있는 timeout 처리가 가능
 #include <stdio.h>

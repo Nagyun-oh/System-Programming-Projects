@@ -1,17 +1,17 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// File Name	: proxy_cache.c						      			                              //
-// Date		: 2024/05/22						     			                                  //
-// Os		: Ubuntu 20.04 64bits			                     		                    	  //
-// Author	: OH Nagyun					             		                                	  //
-// Student ID	: 2021202089						    		                            	  //
-// ---------------------------------------------------------------------   		            	  //
-// Title	: System Programming Assignment #2-4 (proxy server)				                      //
-// Description  :										                                          //
-// 	- 웹 브라우저로부터 HTTP request를 받음			                                                   //
-// 	- HTTP request header로 부터 host정보 (url) 추출                                                 //
-//	- 추출된 URL을 이용한  HIT / MISS 판별  , HTTP response 수신                                       //
+// File Name	: proxy_cache.c						      			                              
+// Date		: 2024/05/22						     			                                  
+// Os		: Ubuntu 20.04 64bits			                     		                    	  
+// Author	: OH Nagyun					             		                                	  
+// Student ID	: 2021202089						    		                            	  
+// ---------------------------------------------------------------------   		            	  
+// Title	: System Programming Assignment #2-4 (proxy server)				                      
+// Description  :										                                          
+// 	- 웹 브라우저로부터 HTTP request를 받음			                                                   
+// 	- HTTP request header로 부터 host정보 (url) 추출                                                 
+//	- 추출된 URL을 이용한  HIT / MISS 판별  , HTTP response 수신                                       
 // 	- signal() 함수를 사용하여 SIGCHLD, SIGALRM, SIGINT 시그널 처리
-//  - HIT/MISS , Terminated message for logfile.txt							                      //
+//  - HIT/MISS , Terminated message for logfile.txt							                      
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // read는 자식 프로세스가 해야 의미 있는 timeout 처리가 가능
 #include <stdio.h>
@@ -45,12 +45,12 @@ void my_alarm(int signo);
 int is_already_logged(const char* url);
 char* getHomeDir(char* home);
 char* sha1_hash(char* input_url, char* hashed_url);
-void Make_directory_for_real(const char* path);
-void Make_directory_file(char* hashed_url);
-void Create_log_directory_with_file();
+void make_directory(const char* path);
+void make_directory_and_file(char* hashed_url);
+void create_log_directory_with_file();
 int HIT_OR_MISS(char* hashed_url);
-void Write_log_in_file( const char* url, const char* hashed_url,const char* type);
-void Write_termination(int hit,int miss,double run_time);
+void write_log_in_file( const char* url, const char* hashed_url,const char* type);
+void write_termination(int hit,int miss,double run_time);
 
 static void handler()
 {
@@ -65,7 +65,9 @@ int subprocess_count =0;
 
 int main()
 {
-    start_time = time(NULL); // 시작 시간
+    // 시작 시간
+    start_time = time(NULL); 
+    
     // hit, miss count
     int hit_count = 0;
     int miss_count = 0;
@@ -78,7 +80,7 @@ int main()
     signal(SIGINT,sigint_handler); // Ctrl + C 로 종료시 로그 기록
     signal(SIGALRM,my_alarm); // SIGALRM 핸들러 등록
 
-    //소켓 생성
+    // 소켓 생성
     if((socekt_fd=socket(PF_INET,SOCK_STREAM,0))<0)
     {
         printf("Server : Can't open stream socket\n");
@@ -89,7 +91,7 @@ int main()
     int opt = 1;
     setsockopt(socekt_fd,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
 
-    //서버 주소 정보 초기화
+    // 서버 주소 정보 초기화
     bzero((char*)&server_addr,sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 모든 IP로부터 연결 허용
@@ -103,7 +105,7 @@ int main()
         return 0;
     }
 
-    //클라이언트 연결 대기
+    // 클라이언트 연결 대기
     listen(socekt_fd,5); 
 
     // 루프 : 웹 요청을 계속해서 처리
@@ -116,18 +118,17 @@ int main()
         char response_message[2048]={0,};  // message
         char tmp[BUFFSIZE] = {0,};
         char method[20] = {0,};
-        char url[BUFFSIZE] = {0,}; // 요청 URL 저장
-        
+        char url[BUFFSIZE] = {0,}; // 요청 URL 저장      
         char* tok = NULL;
 
         len = sizeof(client_addr);
-        //클라이언트 접속 대기 및 수락
-        client_fd = accept(socekt_fd,(struct sockaddr*)&client_addr,&len);
+       
+        client_fd = accept(socekt_fd,(struct sockaddr*)&client_addr,&len); // 클라이언트 접속 대기 및 수락
         if(client_fd<0)
         {
             if(errno==EINTR)
             {
-                 // Ctrl+C로 시그널 인터럽트 발생
+                // Ctrl+C로 시그널 인터럽트 발생
                 break;
             }
             printf("Server : accept failed\n");
@@ -147,42 +148,41 @@ int main()
         pid_t pid =fork();
         if(pid==0) // child process
         { 
-        
-        read(client_fd,buf,BUFFSIZE); // 클라이언트로부터 요청 메시지 읽기
-        strcpy(tmp,buf); // 원본 복사
+            read(client_fd,buf,BUFFSIZE); // 클라이언트로부터 요청 메시지 읽기
+            strcpy(tmp,buf); // 원본 복사
 
-        // 요청 로그 출력
-        puts("===============================================");
-        printf("Request from [%s : %d]\n",inet_ntoa(inet_client_address),client_addr.sin_port);
-        puts(buf);
-        puts("===============================================\n");
+            // 요청 로그 출력
+            puts("===============================================");
+            printf("Request from [%s : %d]\n",inet_ntoa(inet_client_address),client_addr.sin_port);
+            puts(buf);
+            puts("===============================================\n");
 
-        // 요청 메시지에서 GET,URL 추출
-        tok = strtok(tmp," ");
-        strcpy(method,tok);
+            // 요청 메시지에서 GET,URL 추출
+            tok = strtok(tmp," ");
+            strcpy(method,tok);
 
-        // url 추출
-        if(strcmp(method,"GET") == 0)
-        {
-            tok = strtok(NULL," ");
-            strcpy(url,tok);
-        }
-        
-        // 요청 URL 해쉬화
-        char hashed_url[41];
-        sha1_hash(url,hashed_url);
-
-        //캐시 여부 확인
-        int cache_state = HIT_OR_MISS(hashed_url);
-
-        char home[50];
-        getHomeDir(home);
-        if(cache_state){
-            // HIT 
-            if(strcmp(method,"GET")==0&&strstr(buf, "Upgrade-Insecure-Requests: 1")){
-            Write_log_in_file(url, hashed_url, "Hit"); // log 작성
-            hit_count++;
+            // url 추출
+            if(strcmp(method,"GET") == 0)
+            {
+                tok = strtok(NULL," ");
+                strcpy(url,tok);
             }
+        
+            // 요청 URL 해쉬화
+            char hashed_url[41];
+            sha1_hash(url,hashed_url);
+
+            // 캐시 여부 확인
+            int cache_state = HIT_OR_MISS(hashed_url);
+
+            char home[50];
+            getHomeDir(home);
+            if(cache_state){
+                // HIT 
+                if(strcmp(method,"GET")==0&&strstr(buf, "Upgrade-Insecure-Requests: 1")){
+                    write_log_in_file(url, hashed_url, "Hit"); // log 작성
+                    hit_count++;
+                 }
             
             char file_path[200];
             snprintf(file_path,sizeof(file_path),"%s/cache/%c%c%c/%s",home,hashed_url[0],hashed_url[1],hashed_url[2],&hashed_url[3]);
@@ -196,6 +196,7 @@ int main()
             fseek(cache_fp,0,SEEK_END);
             long cache_file_size = ftell(cache_fp);
             fseek(cache_fp,0,SEEK_SET);
+            
             // 응답 헤더 전송
             sprintf(response_header,
             "HTTP/1.0 200 OK\r\n"
@@ -204,96 +205,93 @@ int main()
             "Content-type:text/html\r\n\r\n",cache_file_size);
             write(client_fd, response_header, strlen(response_header));
 
-        // 캐시 파일 내용 전송
-        char cache_buf[BUFFSIZE];
-        size_t n;
-        while ((n = fread(cache_buf, 1, sizeof(cache_buf), cache_fp)) > 0) 
-        {
-            write(client_fd, cache_buf, n);
-        }
+            // 캐시 파일 내용 전송
+            char cache_buf[BUFFSIZE];
+            size_t n;
+            while ((n = fread(cache_buf, 1, sizeof(cache_buf), cache_fp)) > 0) 
+            {
+                write(client_fd, cache_buf, n);
+            }
 
-        fclose(cache_fp);
+            fclose(cache_fp);
         
-        }
-        else{
+        }else{
             // MISS
-            Make_directory_file(hashed_url);
+            make_directory_and_file(hashed_url);
             if(strcmp(method,"GET")==0&&strstr(buf, "Upgrade-Insecure-Requests: 1")){
-            Write_log_in_file(url, hashed_url, "Miss"); // log 작성
-            miss_count++;
+                Write_log_in_file(url, hashed_url, "Miss"); // log 작성
+                miss_count++;
             }
             
-        // URL에서 host와 path 분리
-        char host[BUFFSIZE] = {0}, path[BUFFSIZE] = "/";
-        sscanf(url, "http://%[^/]%s", host, path);
+            // URL에서 host와 path 분리
+            char host[BUFFSIZE] = {0}, path[BUFFSIZE] = "/";
+            sscanf(url, "http://%[^/]%s", host, path);
 
 
-        // 웹 서버 연결
-        struct hostent* hent = gethostbyname(host);
-        
-        int web_fd = socket(AF_INET, SOCK_STREAM, 0);
-        struct sockaddr_in web_addr;
-        memset(&web_addr, 0, sizeof(web_addr));
-        web_addr.sin_family = AF_INET;
-        web_addr.sin_port = htons(80);
-        memcpy(&web_addr.sin_addr.s_addr, hent->h_addr_list[0], hent->h_length);
+            // 웹 서버 연결
+            struct hostent* hent = gethostbyname(host);
+            int web_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-        if (connect(web_fd, (struct sockaddr*)&web_addr, sizeof(web_addr)) < 0) {
-            perror("connect");
-            close(web_fd);
-            exit(1);
-        }
+            struct sockaddr_in web_addr;
+            memset(&web_addr, 0, sizeof(web_addr));
+            web_addr.sin_family = AF_INET;
+            web_addr.sin_port = htons(80);
+            memcpy(&web_addr.sin_addr.s_addr, hent->h_addr_list[0], hent->h_length);
 
-        // GET 요청 전송
-        char request[3000];  
-        snprintf(request, sizeof(request),
-        "GET %s HTTP/1.0\r\n"
-        "Host: %s\r\n"
-        "User-Agent: Mozilla/5.0\r\n"
-        "Connection: close\r\n\r\n", path, host);
-        write(web_fd, request, strlen(request));
-
-        // 캐시 파일 생성
-        char file_path[200];
-        snprintf(file_path, sizeof(file_path), "%s/cache/%c%c%c/%s",
-                home, hashed_url[0], hashed_url[1], hashed_url[2], &hashed_url[3]);
-        FILE* cache_fp = fopen(file_path, "w");
-        if (!cache_fp) {
-            perror("cache fopen");
-        }
-
-        // 응답 수신 → 브라우저 전송 + 캐시 저장
-        char web_buf[BUFFSIZE];
-        ssize_t n;
-   
-        int first_read = 1;
-        while ((n = read(web_fd, web_buf, sizeof(web_buf))) > 0) 
-        {
-            if (first_read) 
-            {
-            alarm(0); // 첫 응답 수신 시 타이머 해제
-            alarm(20); // 이후 타임아웃 다시 설정 (중간 끊김 감지 목적)
-            first_read = 0;
+            if (connect(web_fd, (struct sockaddr*)&web_addr, sizeof(web_addr)) < 0) {
+                perror("connect");
+                close(web_fd);
+                exit(1);
             }
+
+            // GET 요청 전송
+            char request[3000];  
+            snprintf(request, sizeof(request),
+            "GET %s HTTP/1.0\r\n"
+            "Host: %s\r\n"
+            "User-Agent: Mozilla/5.0\r\n"
+            "Connection: close\r\n\r\n", path, host);
+            write(web_fd, request, strlen(request));
+
+            // 캐시 파일 생성
+            char file_path[200];
+            snprintf(file_path, sizeof(file_path), "%s/cache/%c%c%c/%s",
+                    home, hashed_url[0], hashed_url[1], hashed_url[2], &hashed_url[3]);
+            FILE* cache_fp = fopen(file_path, "w");
+            if (!cache_fp) {
+                perror("cache fopen");
+            }
+
+            // 응답 수신 → 브라우저 전송 + 캐시 저장
+            char web_buf[BUFFSIZE];
+            ssize_t n;
+   
+            int first_read = 1;
+            while ((n = read(web_fd, web_buf, sizeof(web_buf))) > 0) 
+            {
+                if (first_read) 
+                {
+                    alarm(0); // 첫 응답 수신 시 타이머 해제
+                    alarm(20); // 이후 타임아웃 다시 설정 (중간 끊김 감지 목적)
+                    first_read = 0;
+                }
     
-            write(client_fd, web_buf, n);
-            if (cache_fp) write(fileno(cache_fp), web_buf, n);
-            alarm(20); // 매 read() 후 타이머 리셋 (중간 응답 끊김 대비)
-            bzero(web_buf, sizeof(web_buf));
-        }
-        if (cache_fp) fclose(cache_fp);
-        close(web_fd);    
+                write(client_fd, web_buf, n);
+                if (cache_fp) write(fileno(cache_fp), web_buf, n);
+                alarm(20); // 매 read() 후 타이머 리셋 (중간 응답 끊김 대비)
+                bzero(web_buf, sizeof(web_buf));
+            }
+            if (cache_fp) fclose(cache_fp);
+            close(web_fd);    
         }
         
         printf("[%s : %d] client was disconnected\n",inet_ntoa(inet_client_address),client_addr.sin_port);
         close(client_fd); // end child process
         exit(0); // end child process
-       }
-       else if(pid>0) 
-       {
-        subprocess_count++; // 자식 프로세서 수 증가
-        // 부모 프로세서는 다음 요청 받기 위해 client_fd만 닫고 반복
-        close(client_fd);
+       }else if(pid>0) {
+            subprocess_count++; // 자식 프로세서 수 증가
+            // 부모 프로세서는 다음 요청 받기 위해 client_fd만 닫고 반복
+            close(client_fd);
        }
 }
     
